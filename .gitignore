@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+outputs/
+# full uncompressed table (use the committed .csv.gz)
+data/*.csv
+data/*.zip
+# LaTeX build files
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+.pytest_cache/
+# regenerated dataset (simulate/)
+build/

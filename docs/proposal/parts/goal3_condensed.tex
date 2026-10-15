@@ -1,0 +1,284 @@
+% Goal 3 -- condensed version for the full proposal.
+% The complete report is docs/goal3_governance/goal3_escalation_governance.pdf.
+\section{Goal 3: Human--AI Escalation and Governance}
+\label{g3-sec:goal3}
+
+The detection layer (Goal~1) answers ``is something abnormal?'' and the diagnosis layer (Goal~2) answers ``what
+is the most likely explanation?''. The governance layer answers a different question: \emph{who should decide
+or act, and under which conditions?} That cannot be reduced to model confidence. An anomaly score says how
+unusual the data look, not why; a correct diagnosis says nothing about the cost of being wrong; and the right
+level of autonomy depends on the action --- requesting another reading is harmless, switching a feeder or
+declaring a customer fraudulent is not. The prototype runs on node N1 and controls no real STEG equipment; all
+thresholds are prototype parameters, not STEG values. The complete design is in
+\texttt{docs/goal3\_governance}.
+
+\subsection{Principles and research foundations}
+\begin{table}[H]
+\centering\small
+\caption{Design principles of the governance layer. The goal is appropriate reliance, not full automation.}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.6cm}>{\raggedright\arraybackslash}p{4.4cm}L@{}}
+\toprule\hdr
+\textbf{\#} & \textbf{Principle} & \textbf{Consequence in the design} \\
+\midrule
+P1 & Autonomy is granted per action, not per event & One event may trigger safe automatic actions while its consequential action stays locked behind approval \\
+P2 & Escalation is monotone & Rules may raise the governance level, never lower it; high confidence cannot override critical risk \\
+P3 & Independent human judgement first & In reviewed cases the operator records a diagnosis and confidence before seeing the AI output \\
+P4 & No default privilege & Neither AI nor operator wins a disagreement by default; strong disagreement triggers evidence gathering and a second review \\
+P5 & Optimise the human + AI system & Success is measured on the combined system (accuracy, safety, workload), not on AI accuracy alone \\
+\bottomrule
+\end{tabularx}
+
+\end{table}
+
+\paragraph{Human-aligned calibration~\cite{benz}.} When a decision maker has her own confidence $H$ and sees the
+AI's confidence $B$, calibration of $B$ alone is not enough: there are processes in which $B$ is perfectly
+calibrated yet every monotone (rational) decision policy is suboptimal, because calibration can fail within a
+given human confidence level. Near-optimal monotone policies exist when the positive rate increases jointly in
+both confidences (``alignment''), which multicalibration per human level guarantees. Empirically, people move
+toward the AI's stated confidence whatever their prior. \emph{We take from it}: treat operator and AI confidence
+jointly; elicit operator confidence on three levels \emph{before} showing the AI; log both; audit alignment.
+
+\paragraph{Learning to defer~\cite{mozannar}.} A classifier $h$ and a rejector $r$ are trained on the loss of
+the combined system. The Bayes-optimal rule defers exactly when the expert is at least as likely to be right:
+\begin{equation}
+h^B(x)=\arg\max_y\eta_y(x),\qquad r^B(x)=\mathbb 1\bigl[\max_y\eta_y(x)\le P(M=Y\mid X=x)\bigr],
+\end{equation}
+and the share of cases handled alone, the \emph{coverage}, is the central trade-off. \emph{We take from it}:
+deferral as an explicit outcome, coverage as a primary metric, the coverage sweep, the $(x,y,m)$ logging
+requirement and synthetic experts for prototyping. Neither paper treats safety constraints, irreversible actions
+or asset criticality; those are EnergyMind design decisions below.
+
+\subsection{Conceptual design}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  b/.style={draw,rounded corners=3pt,align=center,font=\scriptsize,minimum width=34mm,minimum height=8mm,fill=blue!6},
+  g/.style={b,fill=green!12}, d/.style={draw,diamond,aspect=2.4,align=center,font=\scriptsize,fill=orange!12,inner sep=1pt},
+  >={Stealth[length=2mm]}, node distance=4mm and 8mm]
+\node[b] (dia) {Diagnosis (Goal 2)\\ class probabilities $p(c\mid x)$};
+\node[b,below left=5mm and -6mm of dia] (ep) {\textbf{Epistemic path}\\ confidence + band, margin,\\ OOD, conflict, data quality};
+\node[b,below right=5mm and -6mm of dia] (cp) {\textbf{Consequence path}\\ severity, asset criticality,\\ action class, reversibility};
+\node[b,below=22mm of dia] (p1) {Pass 1: rule policy};
+\node[d,below=of p1] (q) {route $\succeq$ G2b\\ or audit sample?};
+\node[g,below left=5mm and 2mm of q] (g01) {G0 MONITOR /\\ G1 AUTO\_SAFE\_ACTION};
+\node[b,below right=5mm and 2mm of q] (blind) {Blind operator judgement};
+\node[g,below=of blind] (p2) {Pass 2: rules + agreement\\ $\to$ G2a / G2b / G3, console};
+\draw[->] (dia)--(ep); \draw[->] (dia)--(cp); \draw[->] (ep)--(p1); \draw[->] (cp)--(p1); \draw[->] (p1)--(q);
+\draw[->] (q)--node[above left,font=\scriptsize]{no}(g01); \draw[->] (q)--node[above right,font=\scriptsize]{yes}(blind);
+\draw[->] (blind)--(p2);
+\end{tikzpicture}
+\caption{Runtime decision flow. The epistemic and consequence paths stay separate until the policy is applied, so
+confidence cannot dilute risk; the blind judgement comes before final routing because agreement is an input.}
+\end{figure}
+
+\paragraph{Inputs.} From Goal~2, per flagged meter-day: the calibrated probability of each of \NORM, \GE, \MF{}
+and \SD, the band and the rule that fired; from Goal~1, the anomaly score, the neighbourhood support and the
+feeder-balance alarm. \ND{} (communication loss) is handled by rule R0. In N1 the classes cover 37 genuine
+events, 33 meter faults, 8 falsifications and 20 communication losses.
+
+\paragraph{Five quantities that must not be merged.} Anomaly score (how unusual), AI confidence (how sure),
+severity (how significant technically), asset criticality (how important the asset) and risk (what happens if the
+governance decision is wrong). Only risk is derived from the others, by an explicit rule.
+
+\begin{table}[H]
+\centering\small
+\caption{Asset criticality and severity. The dataset has no critical asset and no criticality or severity field;
+both are a documented synthetic overlay, joined on identifiers without modifying the data.}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{6.2cm}>{\raggedright\arraybackslash}p{2.0cm}L@{}}
+\toprule\hdr
+\textbf{Asset (registry \texttt{configs/assets.yaml})} & \textbf{Criticality} & \textbf{In N1} \\
+\midrule
+Residential meter & LOW & 24 meters \\
+Small commercial meter & MEDIUM & 6 meters (F1: 2, F2: 3, F3: 1) \\
+Feeder-head meter, feeder switching & HIGH & 3 feeders \\
+Feeder N1-F3 (assumed to supply a health centre) & CRITICAL & 10 meters \\
+\midrule
+\textbf{Scope and duration} & \textbf{Severity} & \\
+\midrule
+One meter, less than 6 hours & LOW & \\
+One meter for 6 hours or more, or 2--6 meters & MEDIUM & \\
+A whole feeder (10 meters) & HIGH & \\
+The whole node or the transformer & CRITICAL & \\
+\bottomrule
+\end{tabularx}
+
+\end{table}
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{Governance levels. G0--G1 are ``AI handles''; G2a--G3 are ``defer''. Above G1, only G1 actions may run
+automatically; locked actions never run on timeout.}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.8cm}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{3.1cm}L@{}}
+\toprule\hdr
+\textbf{Level} & \textbf{Route} & \textbf{Who decides} & \textbf{Typical case} \\
+\midrule
+G0 & MONITOR & AI & \NORM, confident, familiar \\
+G1 & AUTO\_SAFE\_ACTION & AI (whitelisted reversible, non-physical actions) & confident freeze of a residential meter \\
+G2a & AI\_RECOMMENDATION & AI proposes, operator acknowledges & probable meter fault, inspection suggested \\
+G2b & HUMAN\_REVIEW & operator, after blind judgement & uncertainty, disagreement, OOD, suspicious data, high risk \\
+G3 & HUMAN\_APPROVAL\_REQUIRED & named operator with written justification (two people if risk is CRITICAL) & switching, disconnection, fraud declaration, critical asset \\
+\bottomrule
+\end{tabularx}
+
+\end{table}
+
+\subsection{Risk and confidence}
+\paragraph{Confidence bands.} With $\hat c=\arg\max_c p(c\mid x)$ and $p^\star=p(\hat c\mid x)$, the band is HIGH
+if $p^\star\ge\tau^{\mathrm{high}}_{\hat c}$, LOW if $p^\star<\tau^{\mathrm{low}}_{\hat c}$, MEDIUM otherwise
+($\tau^{\mathrm{high}}=0.90$, $0.85$ for \GE; $\tau^{\mathrm{low}}=0.60$; minimum margin $p_{(1)}-p_{(2)}=0.30$). The band
+is capped at MEDIUM when the input is out of distribution, data quality is not good, or the class's calibration
+is not validated --- which requires at least 30 out-of-fold events. In N1 this holds for \GE{} (37) and \MF{} (33)
+but not \SD{} (8), so every suspicious-data case is reviewed by a human.
+
+\paragraph{Risk.} The wrong-action risk of an action $a$ on an asset of criticality $\kappa$ is
+$\rho_{\mathrm{act}}(a)=\max(\beta(a)\oplus\mathbb 1_{\mathrm{irrev}}(a),\kappa)$ for physical or customer-affecting
+actions and $\beta(a)\oplus\mathbb 1_{\mathrm{irrev}}(a)$ otherwise, with $\beta(a)$ the base risk of the action
+class and $\oplus1$ one level up. The missed-event risk uses the most severe \emph{plausible} hypothesis, so a
+confident \MF{} cannot hide a plausible \GE:
+\begin{equation}
+\sigma^\star(x)=\max_{c:\,p(c\mid x)\ge0.05}\sigma(c),\qquad \rho_{\mathrm{miss}}=M[\kappa,\sigma^\star],\qquad
+\rho_{\mathrm{case}}=\max\bigl(\rho_{\mathrm{miss}},\max_a\rho_{\mathrm{act}}(a)\bigr),
+\end{equation}
+where $M$ is an ordinal criticality $\times$ severity matrix (e.g.\ LOW criticality with HIGH severity gives
+MEDIUM risk; CRITICAL criticality with HIGH severity gives CRITICAL). A maximum is used, never a weighted sum:
+ordinal ranks cannot be averaged, and ``low severity'' must never cancel ``health-centre feeder''. The price is
+over-escalation, which is measured rather than assumed acceptable.
+
+\subsection{Escalation policy}
+Order the routes $\mathrm{G0}\prec\mathrm{G1}\prec\mathrm{G2a}\prec\mathrm{G2b}\prec\mathrm{G3}$; each rule sets a
+floor and $\mathrm{route}(e)=\max_k f_k(e)$.
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{Routing rules. R6 follows the dataset's reference responses: a drift or bias that bills a customer
+wrongly for weeks needs a human; scheduled load shedding and short sags only need logging.}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{1.9cm}LL>{\raggedright\arraybackslash}p{1.3cm}@{}}
+\toprule\hdr
+\textbf{Rule} & \textbf{Condition} & \textbf{Floor / effect} & \textbf{Tunable} \\
+\midrule
+R0 Input validity & missing inputs (\ND), unregistered asset, unapproved model & $\ge$ G2b; short communication loss ($\le$12 intervals): G1 gap filling & no \\
+R1 Hard action & physical, customer-affecting, accusatory or irreversible action & action locked; G3 & no \\
+R2 Consequence & case risk CRITICAL, or CRITICAL asset with a non-\NORM{} diagnosis & $\ge$ G2b, consequential actions locked, two-person approval if CRITICAL & no \\
+R2b & case risk HIGH & $\ge$ G2b & no \\
+R3 Agreement & strong / partial disagreement, weak agreement & $\ge$ G2b (+ second review, more data, freeze if strong) & no \\
+R4 Familiarity & out of distribution, insufficient data & $\ge$ G2b + more data & thresholds \\
+R5 Confidence & LOW band or strong conflict / MEDIUM band or small margin & $\ge$ G2b / $\ge$ G2a & yes \\
+R6 Diagnosis default & \NORM{} $\to$ G0. \MF{} $\to$ G1, $\ge$ G2a for a voltage offset or clock shift, $\ge$ G2b if it lasts 24~h or more or affects billing (gain drift, bias). \GE{} $\to$ G0 if scheduled or self-clearing (load shedding, short sag, surge), G2a otherwise, $\ge$ G2b for an equipment cause of severity $\ge$ MEDIUM. \SD{} $\to$ G2b & floor & yes \\
+R7 Recurrence & too many automatic actions on one asset & $\ge$ G2b & yes \\
+R8 Workload & queue strained & priority only, never the route & yes \\
+R9 Consistency & locked action $\to$ G3; proposed action $\to$ $\ge$ G2a & floor & no \\
+\bottomrule
+\end{tabularx}
+
+\end{table}
+
+\paragraph{Critical consequence dominates confidence.} For any non-\NORM{} diagnosis, every hard action is locked
+and routed to G3, and a CRITICAL asset is always at least G2b, \emph{for every value of the AI confidence}:
+R1, the criticality branch of R2 and R9 do not depend on $p^\star$, and a maximum of floors cannot be lowered by
+the floors that do. Confidence may resolve doubt about \emph{what happened}, never change \emph{what is at stake}.
+The property is an automated test on 400 random cases (\texttt{tests/test\_governance.py}).
+
+\paragraph{Two passes and agreement.} Pass~1 applies every rule except R3; if the route is G2b or above, or the
+case falls in the 5\% audit sample, the operator gives a blind diagnosis and a LOW/MID/HIGH confidence. Pass~2
+adds R3, which can only raise the route. Agreement states: AGREEMENT (same class, both at least MID; never lowers
+the route), WEAK\_AGREEMENT (same class, someone guessing; $\ge$ G2b + more data), PARTIAL (competing hypotheses;
+$\ge$ G2b) and STRONG (different classes, the AI gives the operator's class less than 0.20, and both are confident
+or the pair is critical, e.g.\ \GE{} vs.\ \MF; $\ge$ G2b + second review + more data + freeze). When neither party
+is confident, at most two rounds of safe data requests (neighbour readings, feeder-head voltage, history, feeder
+balance) are run before a supervisor takes the case; new evidence may raise the route, never lower it.
+
+\subsection{Operator interaction and audit}
+\begin{figure}[htbp]
+\centering
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize,breaklines=false]
+PHASE 1 - BLIND ASSESSMENT                PHASE 2 - REVEAL AND DECIDE
++-------------------------------------+   +------------------------------------------+
+| Evidence only: trends, neighbours,  |   | Your view (locked)   | AI view           |
+| data quality, severity, criticality |   | GENUINE_EVENT  HIGH  | METER_FAULT  HIGH |
+| (AI diagnosis hidden)               |   |                      | right in 30 of 33 |
+| Your diagnosis: [GENUINE_EVENT]     |   |                      | validation events |
+| Your confidence: LOW / MID / HIGH   |   | !! STRONG DISAGREEMENT - actions locked  |
+| [Submit, show AI view]              |   | [APPROVE] [OVERRIDE] [MORE DATA] [2ND]   |
++-------------------------------------+   +------------------------------------------+
+\end{lstlisting}
+\caption{Operator console mock-up: blind assessment first, then the AI's view is revealed (counts illustrative).}
+\label{fig:console}
+\end{figure}
+\textbf{Against over-trust:} blind-first judgement; confidence as a band with its real validation count, and no
+count at all where calibration is not validated (on N1: \SD); the runner-up always shown; equal buttons with no
+default; written justification for G3 approvals and overrides; two-person approval for CRITICAL risk.
+\textbf{Against under-trust:} routine events never reach the operator; track records of AI and operators per event
+type; outcome feedback; similar past incidents.
+
+Every decision is appended to the hash-chained decision log shared with Goal~2, as a \texttt{governance} block
+(severity, criticality, per-action risk, blind and post-reveal judgements, agreement, route and fired rules, final
+decision and justification, policy version). The expert label used for learning is the \emph{blind} judgement
+(the post-reveal one echoes the AI), and the operator's decision is never treated as ground truth. A calibration
+phase replays labelled dataset events to estimate each operator's accuracy per class, with Wilson intervals.
+
+\paragraph{Implementation.} The Version~1 engine (bands, risk, agreement, locks, routing R0--R9) is
+\texttt{src/energymind/govern/policy.py}; the six scenarios below and five safety invariants, each on 400 random
+cases, are automated tests. The request-more-data loop, the console and Version~2 are design.
+
+\paragraph{Version 2.} A learned rejector replaces only the tunable rules R5--R6, inside the immutable rules:
+$\mathrm{route}_{V2}(e)=\max\bigl(\max_{k\in\{R0,R1,R2,R3,R9\}}f_k(e),\ \phi(r_\theta(x))\bigr)$ with
+$\phi=\mathrm{G1}$ (AI handles) or G2b (defer). It can only move cases inside the region the rules already allow to
+automate, and is promoted only after a shadow-mode comparison with Version~1.
+
+\subsection{Evaluation}
+The layer is evaluated as a human--AI system on N1's labelled event stream, with synthetic operator profiles and
+AI outputs taken out-of-fold from Goal~2. Main metrics: coverage $|A|/N$; review rate; false-escalation rate
+(deferred although the AI was right and the risk was low); missed-escalation rate (automated although the AI was
+wrong or the risk required review); unsafe automatic actions (must be exactly 0); system accuracy and a
+cost-weighted loss; over- and under-reliance; decision time and workload. Two analyses follow the references: a
+coverage sweep (system accuracy and missed escalations against coverage, one curve per operator profile) and an
+alignment audit (positive rate per AI-confidence bin and operator level; cells with at least 30 samples, which N1
+reaches only for \GE{} and \MF). The out-of-distribution rule is exercised on N1's hard-negative periods
+(Ramadan, August vacations) and on its clock shift, which Goal~1 does not recognise.
+
+\paragraph{Agreement with the dataset's reference policy.} Each labelled reading carries a suggested response,
+which we defined in our data card as a starting point; each route is compared with it, a route below the reference
+counting as a missed escalation and above it as a false escalation. Deviations caused by the asset overlay (a sag
+on the critical feeder is reviewed although the reference says ``log'') are listed separately.
+
+\begin{table}[H]
+\centering\small
+\caption{Reference responses and their nearest governance level.}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{2.0cm}L@{}}
+\toprule\hdr
+\textbf{Reference response} & \textbf{Route} & \textbf{N1 readings} \\
+\midrule
+\texttt{auto\_log} & G0 & 1\,100 grid-event and 50 equipment readings (load shedding, sag, surge, cold-load pickup) \\
+\texttt{auto\_correct} & G1 & 112 corruption, 151 stuck meter, 78 short communication losses \\
+\texttt{notify\_operator} & G2a & 500 outage/swell, 3\,711 voltage-offset/clock-shift, 351 long communication losses \\
+\texttt{human\_decision} & $\ge$ G2b & 14\,175 falsification, 8\,922 gain drift/bias, 3\,244 equipment failure \\
+\bottomrule
+\end{tabularx}
+
+\end{table}
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{Reference scenarios built on real N1 events, run as automated tests in \texttt{tests/test\_governance.py} (AI outputs and operator answers are scripted test inputs).
+S2 and S6 show the central claim: high confidence, even with human agreement, never authorises a consequential or
+accusatory action.}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.6cm}L>{\raggedright\arraybackslash}p{1.8cm}@{}}
+\toprule\hdr
+\textbf{Scenario (N1 event)} & \textbf{AI output (scripted)} & \textbf{Outcome} & \textbf{Reference} \\
+\midrule
+S1 Stuck meter, N1-F1, 12--14 Feb & \MF{} 0.95 & automatic safe action (quarantine, re-read, ticket); review if it outlasts 24~h & auto\_correct \\
+S2 Voltage sag on the critical feeder N1-F3, 27 Jun & \GE{} 0.98 & transfer to backup feeder locked: two-person approval & auto\_log (overlay) \\
+S3 Gain drift, N1-F2, from 19 Apr & \MF{} 0.92, operator agrees & human review (billing); agreement does not lower it & human\_decision \\
+S4 Demand surge, N1-F2, 23 Jun & \MF{} 0.93 vs.\ operator \GE{} & strong disagreement: second review, more data, freeze & auto\_log \\
+S5 Clock shift, N1-F1, 23 Feb & \SD{} 0.46, OOD & review with a request for more data; no consequential action & notify\_operator \\
+S6 Partial bypass, N1-F2, 4 Feb & \SD{} 0.94, capped at MEDIUM & disconnection locked: two-person approval; operator orders an inspection & human\_decision \\
+\bottomrule
+\end{tabularx}
+
+\end{table}
+
+\paragraph{Limitations.} No real operator data (thresholds, risk matrix and agreement rules are engineering
+choices); synthetic criticality; only 8 suspicious-data events in N1, so their calibration cannot be validated;
+conservative by design; the policy decides which cases humans see, so logged data reflect the policy (the audit
+sample mitigates this); blind-phase latency may be too slow for urgent cases; an attacker aware of the policy could
+try to stay inside the automated region. All results are simulated and must be reported as such.

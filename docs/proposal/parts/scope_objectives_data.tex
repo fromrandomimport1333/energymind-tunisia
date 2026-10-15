@@ -1,0 +1,178 @@
+\section{Scope}
+\label{sec:scope}
+
+\paragraph{The slice of the energy system we monitor.} The low-voltage distribution network of a
+smart-metered residential neighbourhood, from the secondary of the MV/LV transformer to the customer meters:
+\begin{itemize}
+  \item \textbf{Customer smart meters} reporting every 30~minutes: imported energy, PV export, reactive energy,
+        mean/min/max voltage, current, power factor, voltage distortion and an event log.
+  \item \textbf{One accurate meter at the head of each feeder}, which sees the true energy flow and the
+        feeder voltage. It makes two physical cross-checks possible: the feeder energy balance (head minus the
+        sum of customer meters) and the comparison of each meter's voltage with the head's.
+  \item \textbf{Context}: weather (temperature, irradiance), calendar (weekends, Tunisian public holidays,
+        Ramadan) and the static description of each meter and home.
+\end{itemize}
+
+\paragraph{Single-node prototype and multi-node design.} Our simulated dataset contains three such
+neighbourhoods (\emph{nodes}) with different climates and customer mixes (Table~\ref{tab:nodes}). As the
+challenge requires, Goals~1--3 are prototyped on a single node, \textbf{N1} (coastal suburb: one transformer,
+30 meters on three feeders of 10, three homes with rooftop PV). Goal~4 connects N1, N2 and N3; multi-node
+sharing is a documented design in Phase~1, as the challenge allows.
+
+\begin{table}[H]
+\centering\small
+\caption{Nodes of the simulated dataset (60 meters, 7 feeders, year 2025).}
+\label{tab:nodes}
+\begin{tabularx}{\textwidth}{@{}l >{\raggedright\arraybackslash}p{4.4cm} r r L@{}}
+\toprule\hdr
+\textbf{Node} & \textbf{Profile} & \textbf{Meters} & \textbf{Feeders} & \textbf{Role} \\
+\midrule
+N1 & Coastal suburb & 30 & 3 & Phase 1 prototype (Goals 1--3); sharing participant \\
+N2 & Hot interior town & 15 & 2 & Sharing participant (Goal 4) \\
+N3 & Mixed residential / commercial & 15 & 2 & Sharing participant (Goal 4) \\
+\bottomrule
+\end{tabularx}
+
+\end{table}
+
+\paragraph{The question the system answers.} For every suspicious reading: \emph{can this data be trusted,
+and if not, why, how sure are we, and who should act?} The answer is one of four verdicts shared by all
+components --- \NORM, \GE{} (the data is right and the grid did something), \MF{} (a faulty or corrupted
+meter) and \SD{} (readings that look manipulated) --- plus \ND{} when readings are missing.
+
+\paragraph{Out of scope.} Control of real STEG equipment (the system recommends; switching and disconnection
+always need human approval); the medium- and high-voltage network; real STEG meter data (all data are
+simulated and labelled as such); billing and customer-facing processes.
+
+% =====================================================================
+\section{Objectives}
+\label{sec:objectives}
+
+Each objective is tied to a measurable target. Phase~1 targets are design deliverables and a first measured
+baseline; Phase~2 targets are the ones we will report on the full prototype.
+
+\begin{table}[H]
+\centering\small
+\caption{Objectives and targets.}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.3cm}LL@{}}
+\toprule\hdr
+\textbf{Objective} & \textbf{Phase 1 (this submission)} & \textbf{Phase 2 target (measured on N1)} \\
+\midrule
+\textbf{O1 Detect} anomalous and biased readings (Goal 1) &
+Hybrid detector designed and run on N1: 2.3\% false positives on clean meter-days; 30/36 genuine events, 23/30 meter faults, 6/8 falsifications detected &
+Keep false positives $\le$\,2.5\%; detect the physically consistent cases (bypass, bias, drift) now missed, via a modelled feeder-balance residual \\
+\addlinespace
+\textbf{O2 Explain} each verdict (Goal 2) &
+Rule cascade, 4-class calibrated confidence, explanation pipeline and log schema designed &
+Brier score and calibration curve per class; $\ge$\,90\% of named channels and scopes correct on labelled events; faithfulness check on every LLM text \\
+\addlinespace
+\textbf{O3 Govern} human--AI decisions (Goal 3) &
+Governance levels, risk model, routing rules, blind-first console and scenarios designed &
+Zero unsafe automatic actions; missed-escalation and false-escalation rates against the dataset's reference responses; coverage--accuracy curve \\
+\addlinespace
+\textbf{O4 Share} knowledge across nodes (Goal 4) &
+Four protected channels, privacy accounting, threat model and canary adoption designed &
+Detection of attack types a node has never seen, with vs.\ without sharing; privacy--utility curve; corrupted-node test \\
+\addlinespace
+\textbf{O5 Be honest} about evidence &
+Every measured number is printed by code in the repository (\code{scripts/check\_dataset.py} for the data, \code{docs/goal1\_detection/n1\_experiment.py} for detection; the governance scenarios and safety invariants are tests in \code{tests/test\_governance.py}); untested items are labelled as design &
+Results reported per event with confidence intervals, never as a single accuracy figure \\
+\bottomrule
+\end{tabularx}
+
+\end{table}
+
+% =====================================================================
+\section{Data and Anomaly-Simulation Plan}
+\label{sec:data}
+
+Real fault- and attack-labelled distribution data is rare and is not public for Tunisia, so the project uses a
+simulated dataset with exact labels. Full documentation is in the repository's data card
+(\code{docs/data\_card.md}).
+
+\subsection{The dataset}
+\begin{itemize}
+  \item \textbf{One table, one row per meter per half-hour}: 1\,051\,200 rows $\times$ 67 columns; 60 meters on
+        7 feeders in 3 nodes; 1~January--31~December 2025, local time. Designed and generated by our team with a fixed random
+        seed (2025); the generator in \code{simulate/} (healthy network, anomaly injection, join) reproduces the
+        committed file exactly, and every figure quoted from it is printed by \code{scripts/check\_dataset.py}.
+  \item \textbf{Column groups}: identifiers; meter measurements (10); meter and home details (21); weather and
+        calendar (6); feeder context (11, including feeder-head energy and voltage and the energy-balance gap);
+        ground truth (15 columns prefixed \code{gt\_}).
+  \item \textbf{Label hygiene}: the \code{gt\_*} columns and two simulator settings are never model inputs; five
+        ``oracle'' columns (true energy, true voltage, true losses) are used only to analyse errors.
+\end{itemize}
+
+\subsection{How the normal behaviour is generated}
+\begin{enumerate}
+  \item \textbf{Weather} for three Tunisian climates (coastal, interior, southern coast), with heat waves and
+        solar irradiance.
+  \item \textbf{Household load} with Saturday--Sunday weekends, public holidays, \textbf{Ramadan} (suhoor and
+        iftar peaks), summer vacations, temperature-driven air conditioning, electric heating, and rooftop PV
+        with export.
+  \item \textbf{Calibration} to public Tunisian figures: residential consumption near the STEG average of about
+        1\,450--1\,470~kWh per year (N1: 1\,475~kWh); homes with air conditioning use about $1.68\times$ more in
+        July--August than in January--February.
+  \item \textbf{Electrical model}: voltage drops along each feeder and rises with PV export; power factor falls
+        with air-conditioning load; meters add small measurement noise (energy agrees with
+        $V\,I\,\mathrm{PF}\,\Delta t$ within 0.93\% median, 2.7\% at the 95th percentile).
+  \item \textbf{Feeder-head meter} seeing true energy plus line losses and unmetered street lighting, which
+        creates the realistic $\approx$\,5\% feeder balance gap.
+\end{enumerate}
+
+\subsection{How anomalies are injected}
+Genuine events are injected first, then data problems and falsification at meter level. Every row is labelled
+with its class (\code{gt\_label}), exact cause (\code{gt\_subtype}, 29 values), event identifier
+(\code{gt\_event\_id}), whether the data can be trusted, and a suggested response. Rows are labelled only while
+the anomaly is visible (a drift once it reaches 1\%, a selective bypass only in the bypassed hours).
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{Anomaly classes and injection recipes. 93.2\% of rows are normal.}
+\label{tab:classes}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{1.6cm}L r@{}}
+\toprule\hdr
+\textbf{Class} & \textbf{Data trusted?} & \textbf{Injected causes (recipe)} & \textbf{Rows} \\
+\midrule
+\code{grid\_event} & yes, genuine & outage and post-restoration surge; scheduled load shedding (July--August); voltage sag ($-15$ to $-45$~V) and swell; demand surge ($\times1.35$--$1.8$ for 1.5--4~h); cold-load pickup & 0.37\% \\
+\code{equipment\_failure} & yes, genuine & cable fault (meters beyond the cut lose supply); transformer degradation ending in a trip & 0.64\% \\
+\code{sensor\_fault} & no & gain drift (slow, mostly under-reading); bias step ($\times0.86$--$0.93$ or $\times1.07$--$1.14$ for 3--11 weeks); voltage-sensor offset drift; clock shift (1--3~h); stuck value (3--48~h) & 2.90\% \\
+\code{data\_corruption} & no & spike ($\times8$--$40$); sign flip; saturation (99.999); Wh reported as kWh & 0.02\% \\
+\code{falsification} & no & \emph{physical}: partial bypass (energy and current $\times0.4$--$0.8$), selective bypass, meter zeroing; \emph{data-only}: scaling ($\times0.3$--$0.75$), evasive random-walk scaling, replay of last week, inflation (framing a neighbour), coordinated attack on three meters & 2.74\% \\
+\code{comm\_loss} & no data & all measurements missing for 1.5--48~h (PLC meters most exposed) & 0.10\% \\
+\bottomrule
+\end{tabularx}
+
+\end{table}
+
+\paragraph{Why detection is deliberately not trivial.} A real event hits neighbours together, a failing sensor
+is isolated --- except for the coordinated attack. Physical tampering keeps energy, voltage and current
+consistent and only opens the feeder balance; data-only injection breaks that consistency but leaves voltage
+untouched. Hard negatives are included on purpose: summer vacations (genuinely low use), the Ramadan shift,
+heat-wave surges, PV export reversing the current, and post-outage surges.
+
+\subsection{What the data looks like on the prototype node}
+Node N1 has 98 labelled events in 2025: 37 genuine (33 grid events, 4 equipment failures), 33 meter faults (25
+corruption, 8 sensor faults), 8 falsifications (one of each type) and 20 communication losses. Two facts shape
+the whole design:
+\begin{itemize}
+  \item \textbf{A supply loss is recorded as zeros, not as missing data} (683 readings in N1), so ``flat at
+        zero'' must be read as an outage before it is read as a frozen meter.
+  \item \textbf{Rare events are really rare}: each falsification type occurs once in N1 and 2--3 times in the
+        whole dataset, at most once per node.
+\end{itemize}
+
+\subsection{Evaluation protocol}
+A calendar split (train January--August, validate September--October, test November--December) does not work
+here: in N1 the last two months contain no falsification and no sensor-bias event. All goals therefore use
+\textbf{5-fold cross-validation with folds grouped by event} (no event is split between fitting and testing;
+clean days grouped by meter-week), unsupervised models are trained on clean days only, and results are reported
+per class and per event with intervals. This protocol is implemented in the repository
+(\code{energymind.data.event\_folds}).
+
+\subsection{Known limitations of the data}
+The data are synthetic: a detector tuned here may overfit the generator. The anomaly share ($\approx$\,6.8\%) is
+higher than in reality so that models have examples. Meter fields follow an assumed IEC-style half-hourly
+profile. There is one transformer per node and no three-phase imbalance. All results are reported as simulated.
+
+% =====================================================================

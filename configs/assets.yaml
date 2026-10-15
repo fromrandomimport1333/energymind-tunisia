@@ -1,0 +1,16 @@
+# Synthetic asset-criticality overlay for Goal 3 (the dataset has no criticality field).
+# The dataset itself is not modified; this file is joined on feeder_id / customer_class.
+assumption: "Prototype overlay, not STEG data."
+by_customer_class:
+  res_small: LOW
+  res_medium: LOW
+  res_large: LOW
+  small_commercial: MEDIUM
+feeder_head: HIGH
+critical_feeders:            # Phase 1 prototype runs on node N1
+  N1-F3: "hosts a health centre (assumed)"
+severity_from_scope:          # meters affected x duration -> severity
+  single_meter_lt_6h: LOW
+  single_meter_ge_6h_or_2_to_4_meters: MEDIUM
+  whole_feeder: HIGH
+  whole_node_or_transformer: CRITICAL

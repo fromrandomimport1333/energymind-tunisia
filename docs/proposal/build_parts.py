@@ -1,0 +1,123 @@
+"""Assemble the full proposal from the four goal reports.
+
+The goal reports in docs/goal*/ stay the single source of truth. This script copies the body of each into
+parts/goal{1,2,4}.tex, shifting heading levels, prefixing labels (so equal labels in two reports do not clash),
+redirecting Goal 1's figure data, and merges the bibliographies into parts/bibliography.tex.
+Goal 3 is condensed by hand in parts/goal3_condensed.tex.
+
+Run:  python build_parts.py && pdflatex proposal.tex && pdflatex proposal.tex
+"""
+import re
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+DOCS = HERE.parent
+PARTS = HERE / "parts"
+
+
+def body(path, start, end):
+    s = path.read_text()
+    return s[s.index(start):s.index(end)]
+
+
+def prefix_labels(s, p):
+    s = re.sub(r"\\label\{([^}]*)\}", lambda m: rf"\label{{{p}-{m.group(1)}}}", s)
+    s = re.sub(r"\\(eq)?ref\{([^}]*)\}", lambda m: rf"\{m.group(1) or ''}ref{{{p}-{m.group(2)}}}", s)
+    return s
+
+
+def demote(s):
+    """section -> subsection -> subsubsection -> paragraph (deepest first)."""
+    s = re.sub(r"\\subsubsection(\*?)\{", r"\\paragraph\1{", s)
+    s = re.sub(r"\\subsection(\*?)\{", r"\\subsubsection\1{", s)
+    s = re.sub(r"\\section(\*?)\{", r"\\subsection\1{", s)
+    return s
+
+
+def bibitems(path):
+    s = path.read_text()
+    s = s[s.index(r"\begin{thebibliography}"):s.index(r"\end{thebibliography}")]
+    return re.findall(r"(\\bibitem\{[^}]*\}.*?)(?=\\bibitem\{|\Z)", s.split("\n", 1)[1], flags=re.S)
+
+
+# ---- Goal 1: whole report becomes one section
+g1src = DOCS / "goal1_detection" / "goal1_detection.tex"
+g1 = body(g1src, r"\paragraph{In one paragraph.}", "% =====================================================================\n\\begin{thebibliography}")
+g1 = g1.replace(r"\paragraph{In one paragraph.}", r"\paragraph{Summary.}")
+g1 = demote(g1)
+g1 = re.sub(r"\{data/", "{../goal1_detection/data/", g1)
+g1 = re.sub(r"Layers 5--6 are specified in the Goal~2 and Goal~3\s+notes; this note covers\s+layers 1--4\.",
+            r"Layers 5--6 are specified in Sections~\\ref{g2-sec:goal2} and~\\ref{g3-sec:goal3}; this section covers layers 1--4.", g1)
+g1 = prefix_labels(g1, "g1").replace(r"\ref{g1-g2-sec:goal2}", r"\ref{g2-sec:goal2}").replace(r"\ref{g1-g3-sec:goal3}", r"\ref{g3-sec:goal3}")
+g1 = "\\section{Goal 1: Anomaly and Bias Detection}\n\\label{g1-sec:goal1}\n" + g1
+
+# ---- Goal 2: already one section
+g2src = DOCS / "goal2_explainability" / "goal2_confidence_explainability.tex"
+g2 = body(g2src, "% ===================== BEGIN GOAL 2 SECTION", "% ===================== END GOAL 2 SECTION")
+g2 = prefix_labels(g2, "g2")
+
+# ---- Goal 4: already one section
+g4src = DOCS / "goal4_shared_learning" / "goal4_shared_learning.tex"
+g4 = body(g4src, r"\section{Shared Learning Across the Noosphere}", r"\begin{thebibliography}")
+g4 = g4.replace(r"\section{Shared Learning Across the Noosphere}", r"\section{Goal 4: Shared Learning Across the Noosphere}")
+g4 = prefix_labels(g4, "g4")
+
+# ---------------------------------------------------------------- house style
+# One look for every table and diagram of the proposal. Colours need no rewriting: the master
+# preamble maps every colour name used by the reports onto one palette.
+def _match_brace(s, i):
+    """Index just after the brace group that opens at s[i] == '{'."""
+    depth = 0
+    for j in range(i, len(s)):
+        depth += {"{": 1, "}": -1}.get(s[j], 0)
+        if depth == 0:
+            return j + 1
+    raise ValueError("unbalanced braces")
+
+
+def _caption_on_top(tab):
+    """Move \\caption{..}(\\label{..}) of a table above its tabular."""
+    c = tab.find(r"\caption{")
+    t = min([k for k in (tab.find(r"\begin{tabular"), tab.find(r"\resizebox"), tab.find(r"\input{")) if k >= 0],
+            default=-1)
+    if c < 0 or t < 0 or c < t:
+        return tab
+    end = _match_brace(tab, c + len(r"\caption"))
+    m = re.match(r"\s*\\label\{[^}]*\}", tab[end:])
+    if m:
+        end += m.end()
+    cap = tab[c:end].strip()
+    tab = tab[:c] + tab[end:]
+    anchor = re.search(r"\\centering[^\n]*\n", tab) or re.search(r"\\begin\{table\}(\[[^]]*\])?\n", tab)
+    return tab[:anchor.end()] + cap + "\n" + tab[anchor.end():]
+
+
+def restyle(s):
+    s = re.sub(r"rounded corners=(\d+(\.\d+)?(pt|mm))", "rounded corners=3pt", s)
+    s = re.sub(r"\\\\ \\\\(\[\d+pt\])?[ \t]*$", r"\\\\ \\addlinespace", s, flags=re.M)   # Goal 2 blank-row spacing
+    s = re.sub(r"\\toprule(?!\\hdr)[ \t]*\n", r"\\toprule\\hdr\n", s)                        # shaded header row
+    s = re.sub(r"\\begin\{table\}.*?\\end\{table\}", lambda m: _caption_on_top(m.group(0)), s, flags=re.S)
+    return s
+
+
+g1 = g1.replace(r"\textbf{Detector} & days & events", r"\hdr\textbf{Detector} & days & events")   # 2nd header row
+for name, text in [("goal1.tex", g1), ("goal2.tex", g2), ("goal4.tex", g4)]:
+    text = restyle(text)
+    (PARTS / name).write_text("% generated by build_parts.py from the goal report -- edit the report, not this file\n" + text)
+
+# hand-written parts get the same style (idempotent)
+for name in ["scope_objectives_data.tex", "design_overview.tex", "goal3_condensed.tex", "business.tex",
+             "innovation_plan.tex"]:
+    f = PARTS / name
+    f.write_text(restyle(f.read_text()))
+
+# ---- merged bibliography (first definition of a key wins)
+seen, items = set(), []
+for src in [g1src, g2src, DOCS / "goal3_governance" / "goal3_escalation_governance.tex", g4src]:
+    for it in bibitems(src):
+        key = re.match(r"\\bibitem\{([^}]*)\}", it).group(1)
+        if key not in seen:
+            seen.add(key); items.append(it.strip())
+(PARTS / "bibliography.tex").write_text(
+    "% generated by build_parts.py\n\\begin{thebibliography}{99}\\small\n" + "\n".join(items) + "\n\\end{thebibliography}\n")
+print(f"parts written; {len(items)} references")

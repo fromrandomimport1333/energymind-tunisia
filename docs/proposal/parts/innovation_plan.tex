@@ -1,0 +1,42 @@
+\section{Innovation}
+\begin{itemize}
+  \item \textbf{Physics as the explanation.} The strongest detectors are physical laws a technician can check
+        on site: energy must match $V\,I\,\mathrm{PF}\,\Delta t$, a meter cannot read more voltage than its
+        feeder head, the feeder must balance. Machine learning adds sensitivity, not authority.
+  \item \textbf{Grid event versus bad data as the central question}, answered with cross-sensor evidence rather
+        than a single anomaly score.
+  \item \textbf{Confidence that knows its limits}: a class whose calibration has not been validated cannot be
+        shown as highly confident, and confidence can never unlock a consequential action.
+  \item \textbf{Blind-first human review}, so the operator's judgement is independent evidence rather than an
+        echo of the AI.
+  \item \textbf{Honest evaluation}: event-grouped validation, per-event reporting, and explicit listing of what
+        the system still misses.
+\end{itemize}
+
+% =====================================================================
+\section{Phase 2 Work Plan (to 12 December 2026)}
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.0cm}L@{}}
+\toprule\hdr
+\textbf{Period} & \textbf{Work} \\
+\midrule
+16 Oct -- 8 Nov & Goal 1: feeder-balance residual model and meter attribution; Goal 2: fit the cascade thresholds and calibration out-of-fold, SHAP, verdict cards \\
+9 Nov -- 22 Nov & Goal 3: governance engine integrated with Goals 1--2, reference scenarios, synthetic operators, coverage sweep; operator console \\
+23 Nov -- 2 Dec & Goal 4: three-node simulation (transfer, privacy--utility, corrupted node, C2, C4) \\
+3 Dec -- 12 Dec & End-to-end demo on N1, full report, video and presentation \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section*{Repository}
+The repository contains the dataset (\code{data/}), the data card, the four goal design reports
+(\code{docs/goal1\_detection} \dots{} \code{docs/goal4\_shared\_learning}), the decision-log schema, the
+configuration files (thresholds, asset overlay), the Python package (\code{src/energymind}: data loading and
+label hygiene, rules, verdict cascade, hash-chained decision log, the Version~1 escalation engine, sharing
+primitives), the Goal~1 experiment that produces every detection number quoted here
+(\code{docs/goal1\_detection/n1\_experiment.py}), the script that prints every dataset fact quoted here
+(\code{scripts/check\_dataset.py}), a notebook and the tests (verdict rules, the six governance scenarios and five
+safety invariants on 400 random cases each). All data are simulated; no real STEG data is
+included.
+

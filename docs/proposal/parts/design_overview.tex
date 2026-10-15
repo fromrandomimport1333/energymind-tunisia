@@ -1,0 +1,28 @@
+\section{Preliminary Design: Overview}
+\label{sec:design}
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  b/.style={draw,rounded corners=3pt,align=center,font=\scriptsize,minimum height=14mm,text width=29mm,thick},
+  lab/.style={font=\tiny,fill=white,inner sep=1pt},
+  >={Stealth[length=2mm]}]
+\node[b,draw=black!50,fill=black!4] (m) at (0,0) {\textbf{Node N1 data}\\ 30 meters, 3 feeder heads,\\ weather, calendar};
+\node[b,draw=c1,fill=c1!10] (g1) at (4.4,0) {\textbf{Goal 1 Detect}\\ physics rules, robust $z$,\\ CUSUM, IF, OCSVM,\\ autoencoder};
+\node[b,draw=c2,fill=c2!10] (g2) at (8.8,0) {\textbf{Goal 2 Explain}\\ rule cascade, 4-class\\ confidence, SHAP $\to$ LLM};
+\node[b,draw=c3,fill=c3!10] (g3) at (13.2,0) {\textbf{Goal 3 Govern}\\ risk, routes G0--G3,\\ blind operator review};
+\node[b,draw=black!50,fill=white] (op) at (17.6,0) {\textbf{Operator}\\ console, approval,\\ audit};
+\node[b,draw=c2,fill=c2!5,text width=70mm,minimum height=9mm] (log) at (11.0,-2.6) {Hash-chained decision log: detected $\cdot$ concluded $\cdot$ why $\cdot$ governance};
+\node[b,draw=c4,fill=c4!10,text width=58mm,minimum height=11mm] (g4) at (2.2,-2.6) {\textbf{Goal 4 Share} with N2 and N3: centroids, calibration,\\ model updates, alerts --- never raw data};
+\draw[->,thick] (m)--(g1);
+\draw[->,thick] (g1)--node[lab,above=1mm]{flags, scores}(g2);
+\draw[->,thick] (g2)--node[lab,above=1mm]{verdict, $p(c)$}(g3);
+\draw[->,thick] (g3)--(op);
+\draw[->] (g2.south)--(g2.south|-log.north); \draw[->] (g3.south)--(g3.south|-log.north);
+\draw[<->,thick,c4] (g1.south)--(g1.south|-g4.north);
+\end{tikzpicture}}
+\caption{System overview on one node. Sections~\ref{g1-sec:goal1}--\ref{g4-sec:goal4} give the preliminary design of each goal; Goal~3 is condensed here, its complete design is in \code{docs/goal3\_governance}.}
+\label{fig:overview}
+\end{figure}
+

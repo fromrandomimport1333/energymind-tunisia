@@ -1,0 +1,104 @@
+% Business scope (bonus): deployment, integration, continuous training, budget.
+\section{Business Scope: Deployment, Integration, Continuous Training and Budget}
+\label{sec:business}
+
+\paragraph{What is sold and to whom.} A software analytics layer for a distribution utility (STEG) that sits on
+top of the smart-meter infrastructure it already operates: no new device at the customer. It turns the
+half-hourly meter data into verdicts that an operator can trust and act on. Its value drivers are fewer wasted
+field visits (a genuine grid event is not sent out as a ``faulty meter''), earlier detection of meter
+manipulation, correct billing when a meter drifts, and operator time spent only where it matters. These will be
+quantified in Phase~2 on the simulated nodes; no saving is claimed here.
+
+\subsection{Deployment model}
+The system runs centrally, next to the utility's meter data management system (MDMS): Goals~1--3 run per node
+every day (every 30~minutes for urgent rules such as supply loss), Goal~4's coordinator runs once a week. It
+needs, per neighbourhood: the existing smart meters, one accurate meter at the head of each low-voltage feeder,
+and the operator console (a web application). Roll-out is staged, and each stage must pass its gate before the
+next starts:
+
+\begin{table}[H]
+\centering\small
+\caption{Staged deployment.}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{1.6cm}LL@{}}
+\toprule\hdr
+\textbf{Stage} & \textbf{Duration} & \textbf{What runs} & \textbf{Gate to the next stage} \\
+\midrule
+A. Shadow pilot, 1 neighbourhood & 3 months & Goals 1--3 produce verdicts and routes, but nothing is acted on; verdicts are compared with field inspections & False positives within the alarm budget; zero unsafe automatic actions; operators judge explanations useful \\
+\addlinespace
+B. Live pilot, 3 neighbourhoods & 6 months & Operator workflow live (G0--G3); Goal 4 sharing between the three nodes & Missed-escalation rate below target; canary adoption working; privacy review passed \\
+\addlinespace
+C. Scale-up, district / region & after Stage B, no fixed end & More nodes join; Goal 4 gains participants, which also strengthens robust aggregation & Review load per operator stays within capacity \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Integration}
+\begin{table}[H]
+\centering\small
+\caption{Interfaces with the utility's systems. Integration is the main one-off cost.}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.2cm}LL@{}}
+\toprule\hdr
+\textbf{Interface} & \textbf{Content} & \textbf{Mechanism} \\
+\midrule
+Meter data in & 30-minute interval readings and meter event logs & MDMS export (IEC 61968-9 / CIM messages, or scheduled batch files) \\
+Feeder-head data in & Feeder energy and voltage & MDMS or SCADA; a feeder-head meter is installed where none exists \\
+Context in & Temperature, irradiance, calendar & National weather service feed; holiday and Ramadan calendar \\
+Outage management (out) & Genuine supply-loss events & Event message to the OMS \\
+Field service (out) & Inspection requests for suspected meters & Work order in the field-service system \\
+Billing (out) & Hold or estimate for readings judged untrustworthy & Flag in the billing workflow (only after G2b/G3 decisions) \\
+Identity and audit & Operator roles, two-person approval, hash-chained log & Utility single sign-on; log kept in the utility's archive \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Continuous training}
+\begin{itemize}
+  \item \textbf{Daily, automatic:} each meter's 28-day profile and each feeder's balance reference move forward.
+  \item \textbf{Monthly:} thresholds and the confidence calibration are refitted on newly confirmed cases (field
+        inspection results, operator closures, blind operator judgements), with the event-grouped validation of
+        Section~\ref{sec:data}. A new version is promoted only after a shadow comparison with the current one, and
+        every version (\code{configs/thresholds.yaml}) can be rolled back.
+  \item \textbf{Quarterly:} the learned detectors (Isolation Forest, One-Class SVM, autoencoder) are retrained on
+        the latest clean data.
+  \item \textbf{Weekly:} Goal~4 sharing rounds; each shared artifact passes the local canary test and operator
+        approval before adoption.
+  \item \textbf{Monitoring, continuously:} false positives against the alarm budget, calibration (Brier score per
+        class), share of reviewed cases per operator-hour, and alignment between AI and operator confidence; a
+        breach triggers an early refit or a rollback.
+\end{itemize}
+
+\subsection{Budget}
+\paragraph{What we measured.} Compute is not a cost driver. The complete Goal~1 experiment on one neighbourhood
+for a whole year (30 meters, 525\,600 readings, five-fold training of six detectors) runs in about 30 seconds on a
+laptop. Daily operation scores only one day per node, so a single ordinary server can serve many neighbourhoods;
+explanations are generated only for flagged meter-days. The real operating cost is \textbf{operator review time}:
+at the current false-positive rate (2.3\% of clean meter-days, Section~\ref{g1-sec:goal1}), a 30-meter
+neighbourhood produces about 250 false-alarm meter-days a year, most of which the routing keeps at G0--G1; reducing
+this is a Phase~2 objective.
+
+\paragraph{Pilot budget (stages A and B, 9 months).} Effort is given in person-months; the unit costs are
+\emph{planning assumptions} to be validated with STEG, not quotes, and the total scales linearly with them.
+
+\begin{table}[H]
+\centering\small
+\caption{Indicative pilot budget. Unit costs are planning assumptions (TND = Tunisian dinar).}
+\begin{tabularx}{\textwidth}{@{}L>{\raggedleft\arraybackslash}p{2.6cm}>{\raggedleft\arraybackslash}p{3.0cm}>{\raggedleft\arraybackslash}p{2.4cm}@{}}
+\toprule\hdr
+\textbf{Item} & \textbf{Quantity} & \textbf{Assumed unit cost} & \textbf{Total (TND)} \\
+\midrule
+Data / ML engineers (Goals 1--4, retraining) & 2 $\times$ 9 person-months & 5\,000 / person-month & 90\,000 \\
+Integration engineer (MDMS, OMS, field service, billing) & 6 person-months & 5\,000 / person-month & 30\,000 \\
+Distribution-grid expert (rules, scenarios, operator training) & 3 person-months & 5\,000 / person-month & 15\,000 \\
+Feeder-head meters where missing (3 nodes, 7 feeders) & up to 7 & 2\,500 installed & up to 17\,500 \\
+Server (central, one virtual machine) & 9 months & 500 / month & 4\,500 \\
+Operator time for pilot reviews and training & 2 operators, part time & internal & internal \\
+\midrule
+\textbf{Total (excluding internal operator time)} & & & \textbf{about 157\,000} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Scale-up costs.} Integration is paid once; each new neighbourhood then adds mainly feeder-head meters
+where missing, a short shadow period, and operator review time. The language model for explanations can run
+locally (no per-call fee) or as a service; in both cases only flagged meter-days are explained, and the plain
+evidence summary is always available as a free fallback.

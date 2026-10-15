@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnergyMind decision-log record",
+  "description": "One record per flagged event, append-only JSON Lines, hash-chained. Goal 2 writes detected / concluded / why / explanation; Goal 3 appends governance.",
+  "type": "object",
+  "required": ["event_id", "ts", "node_id", "feeder_id", "meter_id", "detected", "concluded", "why", "hash", "prev_hash"],
+  "properties": {
+    "event_id":  {"type": "string"},
+    "ts":        {"type": "string", "format": "date-time"},
+    "node_id":   {"type": "string", "enum": ["N1", "N2", "N3"]},
+    "feeder_id": {"type": "string"},
+    "meter_id":  {"type": "string"},
+    "detected": {
+      "type": "object",
+      "properties": {
+        "model_version": {"type": "string"},
+        "fused_score":   {"type": "number"},
+        "detector_scores": {"type": "object", "additionalProperties": {"type": "number"}},
+        "channel_errors":  {"type": "object", "additionalProperties": {"type": "number"}},
+        "flag": {"type": "boolean"}
+      }
+    },
+    "concluded": {
+      "type": "object",
+      "properties": {
+        "verdict": {"enum": ["NORMAL", "GENUINE_EVENT", "METER_FAULT", "SUSPICIOUS_DATA", "NO_DATA"]},
+        "subtype": {"type": "string"},
+        "suspect_channel": {"type": ["string", "null"]},
+        "class_probabilities": {"type": "object", "additionalProperties": {"type": "number"}},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "band": {"enum": ["LOW", "MEDIUM", "HIGH"]}
+      }
+    },
+    "why": {
+      "type": "object",
+      "properties": {
+        "rules": {"type": "array", "items": {"type": "object",
+                  "properties": {"id": {"type": "string"}, "measured": {"type": "number"},
+                                 "threshold": {"type": "number"}, "passed": {"type": "boolean"}}}},
+        "shap": {"type": "array", "items": {"type": "array"}},
+        "neighbour_support": {"type": "string"},
+        "thresholds_version": {"type": "string"}
+      }
+    },
+    "explanation": {
+      "type": "object",
+      "properties": {
+        "llm_diagnosis": {"type": "string"},
+        "faithfulness": {"enum": ["pass", "fail", "skipped"]},
+        "shown": {"enum": ["llm", "evidence_summary"]}
+      }
+    },
+    "governance": {
+      "type": "object",
+      "description": "Appended by Goal 3.",
+      "properties": {
+        "route": {"enum": ["G0", "G1", "G2a", "G2b", "G3"]},
+        "rules_fired": {"type": "array", "items": {"type": "string"}},
+        "operator_blind": {"type": "object"},
+        "agreement": {"enum": ["NOT_ASSESSED", "AGREEMENT", "WEAK_AGREEMENT", "PARTIAL", "STRONG"]},
+        "final_decision": {"type": "string"},
+        "justification": {"type": "string"}
+      }
+    },
+    "ground_truth": {
+      "type": "object",
+      "description": "Evaluation only, filled from gt_* columns after the fact.",
+      "properties": {"gt_label": {"type": "string"}, "gt_subtype": {"type": "string"},
+                     "gt_event_id": {"type": "string"}, "gt_expected_response": {"type": "string"}}
+    },
+    "prev_hash": {"type": "string"},
+    "hash": {"type": "string"}
+  }
+}

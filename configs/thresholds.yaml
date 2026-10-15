@@ -1,0 +1,18 @@
+# Prototype thresholds - to be fitted out-of-fold (energymind.data.event_folds), not hand-tuned.
+# Version this file; the decision log records which version produced each verdict.
+version: 0.1-phase1
+rules:
+  physics_tol: 0.05        # |E / (V*I*PF*dt) - 1|; clean non-PV meters: p95 error 2.7%
+  voltage_above_feeder_v: 1.5
+  flat_line_steps: 6       # 3 h at 30 min
+  balance_gap_pct: 12.0    # clean feeders: median 5%, p95 9.5%
+cascade:
+  s: 0.3                   # share of feeder meters flagged together (R0, R4)
+  g: 0.5                   # share of missing readings (R1)
+  phi: 0.05                # rolling std / typical std (R2)
+  rho: 0.05                # physics mismatch (R3)
+  drop: 0.3                # drop below own profile (R5b)
+  gap: 12.0                # feeder balance gap % (R5b)
+cusum:
+  k: 0.5
+  h: 4.0

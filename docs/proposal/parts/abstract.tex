@@ -1,0 +1,13 @@
+\begin{abstract}
+\noindent A smart meter that reports something surprising is telling one of two stories: either the
+\emph{grid} did something unusual (an outage, a voltage sag, a demand surge) or the \emph{data} is wrong (a
+drifting sensor, a corrupted value, a bypassed or falsified meter). The two need opposite responses, and
+confusing them is costly. We propose a human--AI system for a smart-metered low-voltage neighbourhood that
+(1) detects anomalous and biased readings with a hybrid of physics rules, statistics and unsupervised
+learning, (2) explains each verdict with a calibrated confidence and an auditable record, (3) routes every
+case to the right level of human control, never letting confidence override consequence, and (4) lets
+several neighbourhoods learn from each other without sharing raw readings. Phase~1 delivers a labelled,
+Tunisia-calibrated simulated dataset, the design of all four goals, and a first detection prototype run on
+one neighbourhood: at 2.3\% false positives it detects 30 of 36 genuine events, 23 of 30 meter faults and
+6 of 8 falsifications, and it shows plainly which cases remain hard.
+\end{abstract}

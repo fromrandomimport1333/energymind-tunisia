@@ -1,0 +1,127 @@
+% =====================================================================
+%  EnergyMind Tunisia -- Phase 1 Project Proposal (full)
+%  Scope, objectives, data / anomaly-simulation plan, and the preliminary
+%  design of each of the four Challenge Goals.
+%
+%  parts/goal1.tex, goal2.tex, goal4.tex and bibliography.tex are generated
+%  from the goal reports by build_parts.py; goal3_condensed.tex and the other
+%  parts are written by hand.
+%  Build:  python build_parts.py && pdflatex proposal.tex && pdflatex proposal.tex
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{booktabs,tabularx,array,multirow}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,shapes.geometric,calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepgfplotslibrary{groupplots}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{needspace}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[hidelinks]{hyperref}
+\usepackage{bookmark}
+
+% ---------- layout
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\setlist{itemsep=2pt,topsep=3pt}
+\setlength{\emergencystretch}{3em}
+\renewcommand{\_}{\textunderscore\allowbreak}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single,
+        columns=fullflexible,keepspaces=true,backgroundcolor=\color{black!3},
+        xleftmargin=2pt,xrightmargin=2pt}
+\newtheorem{proposition}{Proposition}
+
+% ---------- shared names
+\newcommand{\code}[1]{\texttt{#1}}
+\providecommand{\GE}{\texttt{GENUINE\_EVENT}}
+\providecommand{\MF}{\texttt{METER\_FAULT}}
+\providecommand{\SD}{\texttt{SUSPICIOUS\_DATA}}
+\providecommand{\ND}{\texttt{NO\_DATA}}
+\providecommand{\NORM}{\texttt{NORMAL}}
+\newcommand{\lvl}[1]{\textsf{#1}}
+
+% ---------- house palette: every colour name used by the four goal reports is an alias of it
+\definecolor{pal-navy}{RGB}{30,58,95}
+\definecolor{pal-teal}{RGB}{15,118,110}
+\definecolor{pal-orange}{RGB}{230,135,30}
+\definecolor{pal-red}{RGB}{190,50,40}
+\definecolor{pal-purple}{RGB}{120,60,140}
+\definecolor{pal-light}{RGB}{242,244,247}
+% the base names used in the Goal 2-4 diagrams (blue!6, green!12, violet!7, ...)
+\colorlet{blue}{pal-navy}\colorlet{green}{pal-teal}\colorlet{teal}{pal-teal}
+\colorlet{red}{pal-red}\colorlet{orange}{pal-orange}\colorlet{violet}{pal-purple}
+% overview figure
+\colorlet{c1}{pal-orange}\colorlet{c2}{pal-teal}\colorlet{c3}{pal-navy}\colorlet{c4}{pal-purple}
+% Goal 1
+\colorlet{mzteal}{pal-teal}\colorlet{mzorange}{pal-orange}\colorlet{mzred}{pal-red}\colorlet{mznavy}{pal-navy}
+\colorlet{good}{pal-teal!30}\colorlet{fair}{pal-orange!30}\colorlet{poor}{pal-red!22}
+% Goal 4
+\colorlet{emblue}{pal-navy}\colorlet{emgreen}{pal-teal}\colorlet{emorange}{pal-orange}
+\colorlet{emgrey}{pal-light}\colorlet{emred}{pal-red}
+
+% ---------- tables and captions: booktabs, shaded header row, caption above tables, below figures
+\renewcommand{\arraystretch}{1.15}
+\setlength{\aboverulesep}{0pt}\setlength{\belowrulesep}{0pt}
+\setlength{\extrarowheight}{1.5pt}
+\captionsetup{font=small,labelfont={bf,color=pal-navy},labelsep=period}
+\captionsetup[table]{position=top,skip=4pt}
+\captionsetup[figure]{position=bottom,skip=6pt}
+
+% ---------- Goal 1 helpers (heat cells, plot styles, generated numbers)
+\newcommand{\hc}[1]{\expandafter\hcaux\expandafter{\the\numexpr #1*8/10\relax}{#1}}
+\newcommand{\hcaux}[2]{\cellcolor{mzteal!#1}\ifnum #2>55 \textcolor{white}{#2}\else #2\fi}
+\pgfplotsset{
+  mz/.style={width=4.3cm,height=3.4cm,tick label style={font=\tiny},
+    label style={font=\scriptsize},title style={font=\scriptsize\bfseries},
+    grid=major,grid style={black!10},xmin=0,xmax=72,xtick={0,24,48,72}},
+  colormap/ifmap/.style={colormap={ifmap}{rgb255=(255,248,238) rgb255=(245,190,120)
+    rgb255=(230,135,30) rgb255=(200,80,30) rgb255=(150,40,30)}},
+  colormap/svmmap/.style={colormap={svmmap}{rgb255=(150,40,30) rgb255=(200,80,70)
+    rgb255=(255,255,255) rgb255=(120,200,185) rgb255=(15,118,110)}},
+}
+\input{../goal1_detection/data/numbers.tex}
+\input{../goal1_detection/data/n1_numbers.tex}
+
+% ---------- Goal 4 helpers
+\newcommand{\TODO}[1]{\textcolor{emred}{\textbf{[TODO: #1]}}}
+\newcommand{\impl}{\textcolor{emgreen}{\textsc{impl}}}
+\newcommand{\design}{\textcolor{emorange}{\textsc{design}}}
+\newcommand{\hdr}{\rowcolor{pal-navy!12}}
+
+\title{\textbf{EnergyMind Tunisia}\\[3pt]\large Phase 1 Project Proposal\\[2pt]
+\normalsize Trustworthy monitoring of a smart-metered neighbourhood: telling grid events from bad data}
+\author{}
+\date{IEEE TSYP14 --- PES $\times$ IES Challenge \quad$\cdot$\quad 15 October 2026}
+
+\begin{document}
+\maketitle
+\input{parts/abstract.tex}
+\tableofcontents
+\newpage
+
+\input{parts/scope_objectives_data.tex}
+\input{parts/design_overview.tex}
+\clearpage
+\input{parts/goal1.tex}
+\clearpage
+\input{parts/goal2.tex}
+\clearpage
+\input{parts/goal3_condensed.tex}
+\clearpage
+\input{parts/goal4.tex}
+\clearpage
+\input{parts/business.tex}
+\input{parts/innovation_plan.tex}
+
+\input{parts/bibliography.tex}
+\end{document}
